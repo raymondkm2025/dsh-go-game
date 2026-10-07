@@ -1,0 +1,8 @@
+# dsh-go-game bundle patch: inserts the dual-face plugin row into the web
+# profile roster. The node half (exports ".") runs in the host process — it owns
+# the rules, the AI, the dead-stone estimator and the /dsh-go-game/* routes.
+# The dsh.client declaration in package.json loads the browser half
+# (exports "./client") in the web GUI, which registers the board panel.
+- insert:
+    - id: go-game
+      name: 'dsh-go-game'

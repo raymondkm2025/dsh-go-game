@@ -1,0 +1,51 @@
+{
+  "name": "dsh-go-game",
+  "version": "1.0.0",
+  "description": "Go (圍棋/weiqi) for the DeepSeek Harness: full rules engine, three-level AI opponent, dead-stone estimator, LLM review, SGF save/load, DSH panel and standalone page",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./engine": "./lib/engine.js",
+    "./ai": "./lib/ai.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "go",
+    "weiqi",
+    "baduk",
+    "圍棋",
+    "sgf",
+    "board-game"
+  ],
+  "scripts": {
+    "test": "node test/engine.test.mjs && node test/ai.test.mjs && node test/host.test.mjs && node test/gtp.test.mjs && node test/engine-fallback.test.mjs"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  }
+}

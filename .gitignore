@@ -1,0 +1,16 @@
+# 依賴
+node_modules/
+pnpm-lock.yaml
+
+# DSH 安裝備份（含本機路徑，屬機器專屬狀態）
+install-backup/
+
+# KataGo 引擎與權重（約 186MB 二進制，不進倉庫，另行下載）
+katago/
+*.bin.gz
+
+# 日誌與暫存
+*.log
+.DS_Store
+Thumbs.db
+*.tmp

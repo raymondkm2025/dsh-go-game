@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>圍棋 · dsh-go-game</title>
+<style>
+  :root{
+    --bg:#12141a; --panel:#1b1e26; --line:#8a8f9c; --edge:#5d6373;
+    --fg:#e8eaf0; --dim:#98a0b3; --accent:#5aa9e6; --warn:#e6a05a; --ok:#67c98c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 ui-sans-serif,system-ui,"Segoe UI",Roboto,"Noto Sans TC",sans-serif}
+  header{padding:14px 18px;border-bottom:1px solid #262a34;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0}
+  header .dim{color:var(--dim);font-size:12px}
+  main{display:flex;gap:18px;padding:18px;align-items:flex-start;flex-wrap:wrap}
+  .board-wrap{background:#d9b483;border-radius:10px;padding:8px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+  svg{display:block;width:min(74vw,600px);height:auto;touch-action:manipulation}
+  .side{width:320px;min-width:280px;display:flex;flex-direction:column;gap:12px}
+  .card{background:var(--panel);border:1px solid #262a34;border-radius:10px;padding:12px}
+  .card h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .row + .row{margin-top:8px}
+  button{background:#242936;color:var(--fg);border:1px solid #333a4a;border-radius:7px;padding:6px 10px;cursor:pointer;font:inherit;font-size:13px}
+  button:hover{border-color:#48506a}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#0c1119;font-weight:600}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.on{border-color:var(--ok);color:var(--ok)}
+  select,input{background:#242936;color:var(--fg);border:1px solid #333a4a;border-radius:7px;padding:5px 8px;font:inherit;font-size:13px}
+  label{color:var(--dim);font-size:12px;display:flex;gap:6px;align-items:center}
+  .stat{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:13px}
+  .stat b{font-weight:600}
+  .stat span{color:var(--dim)}
+  .turn{padding:6px 10px;border-radius:8px;background:#242936;display:flex;align-items:center;gap:8px;font-weight:600}
+  .dot{width:12px;height:12px;border-radius:50%;border:1px solid #0006;display:inline-block}
+  .dot.b{background:#111}.dot.w{background:#f2f2f2}
+  pre{white-space:pre-wrap;word-break:break-word;margin:0;font:13px/1.55 inherit;color:var(--fg)}
+  .refline{margin-top:8px;color:var(--warn);font-size:13px}
+  .dim{color:var(--dim)}
+  .err{color:#e07a7a}
+  .ghost{opacity:0;transition:opacity .08s}
+  .cell:hover .ghost{opacity:.42}
+  #banner{padding:10px 18px;background:#1b2a22;border-bottom:1px solid #26402f;color:var(--ok);display:none}
+  #banner.err{background:#2a1b1b;border-color:#402626;color:#e07a7a}
+</style>
+</head>
+<body>
+<header>
+  <h1>圍棋 · dsh-go-game</h1>
+  <span class="dim">中國規則數子 · 19/13/9 路 · 三級 AI 陪練 · 全頁版</span>
+  <span class="dim" id="conn">連線中…</span>
+</header>
+<div id="banner"></div>
+<main>
+  <div class="board-wrap"><svg id="board" viewBox="0 0 20 20" aria-label="Go board"></svg></div>
+  <div class="side">
+    <div class="card">
+      <div class="turn"><span class="dot b" id="turnDot"></span><span id="turnText">輪到黑方</span></div>
+      <div class="row" style="margin-top:10px">
+        <button id="btnPass">虛手 (Pass)</button>
+        <button id="btnUndo">悔棋</button>
+        <button id="btnResign">認輸</button>
+        <button id="btnAi">AI 落子</button>
+      </div>
+      <div class="row">
+        <button id="btnEstimate">形勢判斷</button>
+        <button id="btnDead">標記死子</button>
+        <button id="btnReview">覆盤</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>對局</h2>
+      <div class="stat">
+        <span>手數</span><b id="stMoves">0</b>
+        <span>提子（黑／白）</span><b id="stCaps">0 / 0</b>
+        <span>結果</span><b id="stResult">—</b>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label>棋力
+          <select id="selLevel">
+            <option value="easy">入門</option>
+            <option value="medium" selected>中級</option>
+            <option value="hard">進階</option>
+          </select>
+        </label>
+        <label>AI 執
+          <select id="selAiSide">
+            <option value="">無（雙人）</option>
+            <option value="white" selected>白</option>
+            <option value="black">黑</option>
+          </select>
+        </label>
+        <label>引擎
+          <select id="selEngine">
+            <option value="builtin" selected>內建（快）</option>
+            <option value="katago">KataGo（強）</option>
+          </select>
+        </label>
+      </div>
+      <div class="row">
+        <label>縱橫
+          <select id="selSize"><option>19</option><option>13</option><option>9</option></select>
+        </label>
+        <label>貼目<input id="inKomi" type="number" step="0.5" value="7.5" style="width:70px"></label>
+        <label>讓子<input id="inHandicap" type="number" min="0" max="9" value="0" style="width:56px"></label>
+      </div>
+      <div class="row"><button class="primary" id="btnNew">開新局</button><button id="btnSave">存檔</button><button id="btnLoad">讀檔</button></div>
+    </div>
+    <div class="card">
+      <h2>覆盤 / 形勢</h2>
+      <pre id="review">按「覆盤」請 AI 講評（需已配置模型），或按「形勢判斷」用本地模擬數子。</pre>
+      <div class="refline" id="suggestion"></div>
+    </div>
+  </div>
+</main>
+<script src="/dsh-go-game/page.js"></script>
+</body>
+</html>
