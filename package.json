@@ -31,6 +31,14 @@
     "test": "node test/engine.test.mjs && node test/ai.test.mjs && node test/host.test.mjs && node test/gtp.test.mjs && node test/engine-fallback.test.mjs"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raymondkm2025/dsh-go-game.git"
+  },
+  "homepage": "https://github.com/raymondkm2025/dsh-go-game#readme",
+  "bugs": {
+    "url": "https://github.com/raymondkm2025/dsh-go-game/issues"
+  },
   "engines": {
     "node": ">=20"
   },
