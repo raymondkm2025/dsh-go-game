@@ -50,12 +50,17 @@ function makeHarness(services = {}) {
   return { route, routes }
 }
 
-function fakeReq(method, url, body) {
+function fakeReq(method, url, body, extraHeaders = {}) {
   const handlers = {}
+  // Mirror the real client: the panel and the standalone page POST with a JSON
+  // body, and browsers always attach Host. `extraHeaders` lets a test forge a
+  // cross-site request.
+  const headers = { host: '127.0.0.1:19387', ...extraHeaders }
+  if (method === 'POST' && !('content-type' in extraHeaders)) headers['content-type'] = 'application/json'
   const req = {
     method,
     url,
-    headers: {},
+    headers,
     on(event, fn) {
       handlers[event] = handlers[event] || []
       handlers[event].push(fn)
@@ -71,9 +76,9 @@ function fakeReq(method, url, body) {
   return req
 }
 
-function call(route, method, url, body) {
+function call(route, method, url, body, extraHeaders) {
   return new Promise((resolve, reject) => {
-    const req = fakeReq(method, url, body)
+    const req = fakeReq(method, url, body, extraHeaders)
     const res = {
       statusCode: 200,
       headers: {},
@@ -265,7 +270,7 @@ tests.push(check('local summary works without a model', async () => {
 }))
 
 tests.push(check('review falls back to the local summary when no llm is wired', async () => {
-  const r = await call(route, 'GET', '/dsh-go-game/review?id=' + id)
+  const r = await call(route, 'POST', '/dsh-go-game/review', { id })
   eq(r.json.ok, true)
   eq(r.json.llm, false)
   eq(r.json.local, true)
@@ -318,7 +323,7 @@ tests.push(check('models lists providers and models from the harness', async () 
 
 tests.push(check('review uses the llm and parses the suggested move', async () => {
   await call(llmRoute, 'POST', '/dsh-go-game/new', { id: 'llm-1', size: 9, aiSide: 'white' })
-  const r = await call(llmRoute, 'GET', '/dsh-go-game/review?id=llm-1')
+  const r = await call(llmRoute, 'POST', '/dsh-go-game/review', { id: 'llm-1' })
   eq(r.json.ok, true)
   eq(r.json.llm, true)
   eq(r.json.provider, 'fake-llm')
@@ -330,6 +335,79 @@ tests.push(check('review uses the llm and parses the suggested move', async () =
 tests.push(check('status reports the llm as available', async () => {
   const r = await call(llmRoute, 'GET', '/dsh-go-game/status')
   eq(r.json.llm, true)
+}))
+
+// ------------------------------------------------------- cross-site gate
+
+tests.push(check('a cross-site subresource request is refused', async () => {
+  // A browser sends Sec-Fetch-Site (and no Origin) for an <img>/<script> load.
+  const r = await call(route, 'POST', '/dsh-go-game/new', { size: 9 }, { 'sec-fetch-site': 'cross-site' })
+  eq(r.status, 403)
+  eq(r.json.error, 'cross-site-refused')
+  const g = await call(route, 'GET', '/dsh-go-game/status', undefined, { 'sec-fetch-site': 'cross-site' })
+  eq(g.status, 403, 'reads are refused too — the board must not leak either')
+}))
+
+tests.push(check('an Origin for another host is refused, same-origin is allowed', async () => {
+  const bad = await call(route, 'POST', '/dsh-go-game/new', { size: 9 }, { origin: 'http://evil.example' })
+  eq(bad.status, 403)
+  eq(bad.json.error, 'cross-site-refused')
+
+  const good = await call(route, 'POST', '/dsh-go-game/new', { id: 'same-origin-1', size: 9 }, { origin: 'http://127.0.0.1:19387' })
+  eq(good.status, 200, 'the plugin own page is same-origin')
+  eq(good.json.ok, true)
+}))
+
+tests.push(check('a non-browser caller (no Origin, no Sec-Fetch-Site) is allowed', async () => {
+  // curl and the install verifier send neither header; they must keep working.
+  const r = await call(route, 'GET', '/dsh-go-game/status', undefined, { host: '' })
+  eq(r.status, 200)
+  eq(r.json.ok, true)
+}))
+
+tests.push(check('state-changing routes require POST', async () => {
+  for (const path of ['/move', '/pass', '/undo', '/resign', '/ai', '/dead', '/estimate', '/review', '/save', '/load', '/new']) {
+    const r = await call(route, 'GET', '/dsh-go-game' + path + '?id=whatever')
+    eq(r.status, 405, path + ' must reject GET')
+    eq(r.json.error, 'method-not-allowed', path)
+  }
+}))
+
+tests.push(check('read-only routes still answer GET', async () => {
+  for (const path of ['/status', '/models', '/games']) {
+    const r = await call(route, 'GET', '/dsh-go-game' + path)
+    eq(r.status, 200, path + ' must keep working with GET')
+  }
+}))
+
+tests.push(check('a POST body must be application/json', async () => {
+  const r = await call(route, 'POST', '/dsh-go-game/new', { size: 9 }, { 'content-type': 'text/plain' })
+  eq(r.status, 415)
+  eq(r.json.error, 'content-type-must-be-application-json')
+}))
+
+tests.push(check('selecting a weights file is POST-only and path-traversal safe', async () => {
+  // A bare GET is a status read and stays allowed.
+  const read = await call(route, 'GET', '/dsh-go-game/engine')
+  eq(read.status, 200)
+  eq(read.json.ok, true)
+
+  // Selecting a model via GET is refused.
+  const viaGet = await call(route, 'GET', '/dsh-go-game/engine?model=default.bin.gz')
+  eq(viaGet.status, 405)
+
+  // Traversal and absolute paths are rejected, and never reach the engine.
+  for (const hostile of ['../../../etc/passwd', '/etc/passwd', 'a/../../b.bin.gz', '..', '.', 'weights.bin.gz/../../x']) {
+    const r = await call(route, 'POST', '/dsh-go-game/engine', { model: hostile })
+    eq(r.status, 400, JSON.stringify(hostile) + ' must be rejected')
+    eq(r.json.error, 'bad-model-name')
+  }
+
+  // A well-formed name is accepted (the engine itself is simply absent here).
+  const ok = await call(route, 'POST', '/dsh-go-game/engine', { model: 'kata1-9x9.bin.gz' })
+  eq(ok.status, 200)
+  eq(ok.json.ok, true)
+  eq(ok.json.engine.available, false)
 }))
 
 // -------------------------------------------------------------------- report

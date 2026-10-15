@@ -54,7 +54,10 @@ function call(route, method, url, body) {
     const req = {
       method,
       url,
-      headers: {},
+      // Mirror the real client: actions POST a JSON body, reads use a bare GET.
+      headers: method === 'POST'
+        ? { host: '127.0.0.1:19387', 'content-type': 'application/json' }
+        : { host: '127.0.0.1:19387' },
       on(event, fn) {
         handlers[event] = handlers[event] || []
         handlers[event].push(fn)
